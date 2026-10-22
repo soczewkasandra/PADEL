@@ -1,50 +1,44 @@
 # PADEL WITH KRYSTIAN
 
-Demonstracyjna aplikacja React + TypeScript do zapisów na indywidualne, 60-minutowe treningi padla. Bez płatności i bez wysyłania SMS-ów.
+React + TypeScript + Supabase. Rezerwacje treningów 60-minutowych, prywatny panel trenera, losowe linki statusu, brak płatności.
 
-## Podgląd na swoim komputerze
+**Zmiany przygotowane do konfiguracji i testów, nie do automatycznej publikacji.** Nie łącz z rzeczywistymi danymi klientów przed końcową weryfikacją. Zmiany nie wymagają migracji starych danych: demo w localStorage było wyłącznie przykładowe i nie jest importowane.
 
-Zainstaluj Node.js 22 lub nowszy. Otwórz terminal w katalogu projektu i wpisz:
+## Instrukcja bez wiedzy programistycznej
+
+Otwórz [docs/SUPABASE.md](docs/SUPABASE.md). Zawiera kolejność kliknięć w Supabase, konfigurację CAPTCHA i konta trenera oraz scenariusz testów. Nie uruchamiaj deploymentu Vercel ani nie wysyłaj zmian na automatycznie wdrażaną gałąź `main` przed zakończeniem konfiguracji i testów.
+
+## Dla osoby konfigurującej kod
+
+Node.js 22+, istniejący checkout `/workspace/PADEL`. W zadaniu chmurowym używaj istniejącego checkoutu — nie twórz worktree bez prośby użytkownika.
 
 ```sh
 npm ci
+cp .env.example .env.local
+# Uzupełnij publiczny URL i klucz Supabase oraz publiczny klucz Turnstile.
 npm run dev
 ```
 
-Otwórz w przeglądarce adres podany przez Vite (zwykle http://localhost:5173). To lokalny podgląd, nie publikacja strony w internecie. W środowisku chmurowym, jeśli nie masz dostępu do portów podglądu, pobierz repozytorium na komputer i uruchom te same polecenia. Samo uruchomienie serwera w chmurze nie zapewnia dostępnego adresu strony.
-
-W tym środowisku można użyć `npm ci --cache /workspace/.npm-cache`, ponieważ domyślny katalog cache może być niedostępny.
-
-## Jak sprawdzić demo
-
-1. W kalendarzu wybierz dzień oznaczony kropką, a potem godzinę.
-2. Wpisz fikcyjne dane, np. Alex Przykładowy, 000 000 000, i wyślij zgłoszenie.
-3. Zobaczysz status „Oczekuje na potwierdzenie”.
-4. Przejdź do „Panel trenera”, zatwierdź lub odrzuć zgłoszenie. Odrzucenie zwalnia godzinę.
-5. W panelu wybierz dzień, dodaj godzinę lub zablokuj wolny termin. Treningi nie mogą się nakładać.
-
-Kalendarz pokazuje czas lokalny przeglądarki. Przykładowe terminy obejmują 28 dni od pierwszego uruchomienia. Dane pozostają w localStorage tej przeglądarki. Aby zresetować demo, usuń w narzędziach przeglądarki klucz `padel-krystian-demo-v1` i odśwież stronę.
-
-## Kontrole
+W chmurze w razie niedostępnego cache: `npm ci --cache /workspace/.npm-cache`.
+Nie istnieje awaryjny tryb demo zapisujący lokalnie dane. Bez konfiguracji aplikacja pokazuje komunikat. Sesja Supabase Auth jest przechowywana wyłącznie w pamięci (odświeżenie strony wymaga ponownego logowania).
 
 ```sh
-npm test
-npm run build
+npm test             # komponenty, strefa czasowa, zabezpieczenia Edge Function
+npm run test:db      # Docker: osobny, tymczasowy PostgreSQL 17; nigdy baza użytkownika
+npm run build        # TypeScript i build Vite
+npm run edge:bundle  # aktualizacja pliku do edytora Supabase
 ```
 
-## Zakres demonstracyjny
+`test:db` uruchamia własny kontener tylko na interfejsie loopback i usuwa go po teście. Testuje faktyczny SQL, role, RLS, statusy, limity i konkurencję dwóch połączeń. Minimalny stub `auth.uid()` w teście zastępuje tożsamość Supabase; rzeczywiste Auth, gateway, JWT, CORS i Turnstile trzeba dodatkowo sprawdzić w prywatnym podglądzie projektu testowego.
 
-Panel jest otwarty, bez prawdziwego logowania. Nie używaj prawdziwych danych klientów. Dane nie są wspólne dla urządzeń i przeglądarek. Przed udostępnieniem klientom potrzebne będą: backend z bazą danych, uwierzytelnianie i autoryzacja trenera, atomowe rezerwacje zapobiegające jednoczesnym zapisom, zasady prywatności i bezpieczne przechowywanie danych. Strona nie została opublikowana.
+## Architektura i bezpieczeństwo
 
-## Publiczny podgląd bez terminala — Vercel
+- Publiczny kalendarz: wyłącznie RPC `available_slots`, bez danych osobowych.
+- Publiczne zgłoszenie/status: Edge Function `booking`. CAPTCHA Turnstile jest sprawdzana po stronie serwera dla każdego zapisu. Brak obejścia zapisami REST/RPC z kluczem publicznym.
+- Baza: tabele `slots`, `customers`, `bookings`, RLS i jawne uprawnienia. Tylko jeden użytkownik z `private.coach` zarządza danymi. Rola nie jest pobierana z edytowalnych metadanych użytkownika.
+- Rezerwacja w jednej transakcji z blokadą wiersza terminu oraz dodatkowym unikalnym indeksem dla aktywnych rezerwacji. Oczekująca i zatwierdzona zajmują godzinę; odrzucona ją zwalnia.
+- Link: 32 losowe bajty (256 bitów). Baza przechowuje wyłącznie SHA-256 tokenu. Token znajduje się we fragmencie `#status=…`, nie w ścieżce/query, i po otwarciu jest usuwany z paska adresu. Brak analityki i zewnętrznych fontów. Status nie ujawnia danych osobowych i wygasa 90 dni po treningu.
+- Antyspam: CAPTCHA z kontrolą domeny i action, honeypot, walidacja i limit rozmiaru, 3 zweryfikowane próby zapisu na numer/dobę UTC, 30 żądań zapisu i 300 statusu/10 min globalnie. Próby błędne także zużywają budżet. Limity są atomowe i wspólne dla instancji. Numery w limiterze są HMAC-owane sekretem serwera. Nie ufamy nagłówkom IP od klienta. To ograniczenie spamu, nie gwarancja odporności na każdy atak DDoS: atakujący może wyczerpać wspólny budżet; przed większym ruchem potrzebne monitoring i ochrona brzegowa.
+- Dostępne godziny w horyzoncie 180 dni. Godziny prezentowane w Europe/Warsaw, w bazie timestamptz. Nie importujemy starych danych demo.
 
-Publikację uruchamia właściciel repozytorium. Aplikacja nie publikuje się sama.
-
-1. Wejdź na https://vercel.com i zaloguj się przez GitHub.
-2. Wybierz **Add New → Project** (lub **New Project**).
-3. Przy repozytorium `soczewkasandra/PADEL` wybierz **Import**. Jeśli nie ma go na liście, skonfiguruj dostęp integracji Vercel do tego jednego repozytorium.
-4. Sprawdź ustawienia: **Framework Preset: Vite**, katalog główny repozytorium, **Build Command: npm run build**, **Output Directory: dist**. Zmienne środowiskowe nie są potrzebne.
-5. Dopiero gdy chcesz udostępnić demo, kliknij **Deploy**. To tworzy publiczny podgląd aplikacji.
-6. Po zakończeniu otwórz adres podany przez Vercel. Jeżeli dostęp wymaga logowania do Vercel, sprawdź ustawienia **Deployment Protection** projektu i zdecyduj, czy chcesz zezwolić na dostęp publiczny.
-
-To wyłącznie demonstracja: panel trenera jest dostępny bez logowania, rezerwacje są lokalne dla każdej przeglądarki i nie trafiają do trenera. Używaj tylko fikcyjnych danych. Zwykle kolejne commity na `main` uruchamiają automatyczny deployment w podłączonym projekcie Vercel; uwzględnij to przed późniejszymi zmianami. Podgląd można wyłączyć, usuwając projekt w ustawieniach Vercel — nie usuwa to repozytorium GitHub.
+Szczegóły, limity weryfikacji i obowiązki przed pracą z danymi klientów: [docs/SUPABASE.md](docs/SUPABASE.md).

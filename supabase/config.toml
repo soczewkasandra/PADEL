@@ -1,0 +1,5 @@
+project_id = "padel-with-krystian"
+
+[functions.booking]
+# Public users have no Supabase session. Requests are validated inside the function.
+verify_jwt = false

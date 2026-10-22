@@ -1,17 +1,60 @@
-export type Slot = { id: string; date: string; time: string; blocked: boolean };
-export type Booking = { id: string; slotId: string; first: string; last: string; phone: string; status: 'pending' | 'approved' | 'rejected' };
-export type Data = { slots: Slot[]; bookings: Booking[] };
-export const dateKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-export function seed(): Data {
- const slots: Slot[]=[];
- for(let day=0;day<28;day++) { const d=new Date(); d.setDate(d.getDate()+day); for(const time of ['09:00','11:00','16:00','18:00']) slots.push({id:`${dateKey(d)}-${time}`,date:dateKey(d),time,blocked:day%5===3&&time==='11:00'}); }
- return {slots,bookings:[{id:'demo',slotId:slots[6].id,first:'Alex',last:'Przykładowy',phone:'000 000 000',status:'pending'}]};
-}
-export const occupied = (data:Data,id:string) => data.bookings.some(b=>b.slotId===id&&b.status!=='rejected');
-export const future = (s:Slot) => new Date(`${s.date}T${s.time}`).getTime()>Date.now();
-export function reserve(data:Data,slotId:string,first:string,last:string,phone:string):Data {
- const s=data.slots.find(s=>s.id===slotId);
- if(!s||s.blocked||occupied(data,slotId)||!future(s)) throw new Error('Ten termin nie jest już dostępny. Wybierz inny.');
- if(!first.trim()||!last.trim()||!/^\+?[\d\s()-]{9,20}$/.test(phone)||phone.replace(/\D/g,'').length<9) throw new Error('Podaj imię, nazwisko i poprawny numer telefonu.');
- return {...data,bookings:[...data.bookings,{id:crypto.randomUUID(),slotId,first:first.trim(),last:last.trim(),phone:phone.trim(),status:'pending'}]};
+export type Status = "pending" | "approved" | "rejected";
+export type Slot = {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  blocked: boolean;
+};
+export type Booking = {
+  id: string;
+  slot_id: string;
+  status: Status;
+  created_at: string;
+  customers: { first_name: string; last_name: string; phone: string };
+};
+export type BookingStatus = {
+  status: Status;
+  starts_at: string;
+  ends_at: string;
+};
+export const labels: Record<Status, string> = {
+  pending: "Oczekuje na potwierdzenie",
+  approved: "Potwierdzona",
+  rejected: "Odrzucona",
+};
+export const dateKey = (d: Date) =>
+  new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Warsaw",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+export const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString("pl-PL", {
+    timeZone: "Europe/Warsaw",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+export const fullDate = (key: string) =>
+  new Date(key + "T12:00:00Z").toLocaleDateString("pl-PL", {
+    timeZone: "Europe/Warsaw",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+export function warsawToIso(date: string, time: string) {
+  const target = Date.parse(`${date}T${time}:00Z`);
+  const candidates = [60, 120]
+    .map((offset) => new Date(target - offset * 60000))
+    .filter(
+      (d) =>
+        Number.isFinite(d.getTime()) &&
+        dateKey(d) === date &&
+        timeLabel(d.toISOString()) === time,
+    );
+  if (candidates.length !== 1)
+    throw new Error(
+      "Ta godzina jest niejednoznaczna lub nie istnieje przy zmianie czasu. Wybierz inną.",
+    );
+  return candidates[0].toISOString();
 }
