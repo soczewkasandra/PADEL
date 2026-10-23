@@ -169,3 +169,11 @@ Link statusu jest kluczem dostępu: osoba, która go otrzyma, zobaczy status i t
 Ograniczenia antyspamu są celowo restrykcyjne na start: 30 prób zapisu i 300 odczytów statusu na 10 minut dla całej aplikacji; 3 zweryfikowane próby na numer dziennie. To stałe okna czasowe; przy granicy okien można wykonać więcej prób w krótkim odstępie. CAPTCHA, unikalne rezerwacje i limity istotnie ograniczają nadużycia, ale nie gwarantują odporności na DDoS ani świadome blokowanie grafiku przez człowieka. Monitoruj limity przed zwiększeniem ruchu.
 
 Nie publikuj produkcyjnie, dopóki konfiguracja, wszystkie scenariusze testowe i kwestie danych klientów nie zostaną zakończone. Wysłanie zmian na `main` może automatycznie uruchomić Vercel — dlatego obecne zmiany pozostają lokalne.
+
+## Reset hasła trenera
+
+Aplikacja obsługuje link resetujący wysyłany przez panel Supabase (implicit flow).
+W projekcie testowym ustaw **Authentication → URL Configuration → Site URL** na `http://localhost:5173`.
+Uruchom aktualną aplikację na tym Macu i porcie. W **Authentication → Users** wybierz konto i wyślij nowy link odzyskiwania hasła. Otwórz wiadomość na tym samym Macu, gdy aplikacja działa. Link prowadzi do formularza ustawienia nowego hasła (minimum 12 znaków, dwukrotne wpisanie). Po sukcesie sesja jest kończona; wróć do panelu i zaloguj się nowym hasłem. Nie trzeba usuwać konta ani zmieniać `private.coach`.
+
+Linki są jednorazowe i wygasają. Nie udostępniaj linku, fragmentu adresu, tokenów ani hasła. Jeśli stary link został otwarty lub wygasł, wyślij nowy. Formularz wymaga prawidłowej sesji Supabase, a tokeny nie są zapisywane na dysku i są usuwane z paska adresu. Nie odświeżaj formularza przed zakończeniem zmiany hasła. Ten mechanizm trzeba dodatkowo sprawdzić z rzeczywistym projektem i jego szablonem wiadomości.
